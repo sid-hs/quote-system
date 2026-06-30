@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Cotizacion y Orden de Compra - QuotePro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo-area">
+      <h1><i class="fas fa-file-invoice-dollar"></i> QuotePro DB</h1>
+    </div>
+    <nav class="nav-menu">
+      <div class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')"><i class="fas fa-chart-line"></i> Dashboard</div>
+      <div class="nav-item" data-tab="new-quote" onclick="showTab('new-quote')"><i class="fas fa-plus-circle"></i> Nueva Cotizacion</div>
+      <div class="nav-item" data-tab="quotes" onclick="showTab('quotes')"><i class="fas fa-file-alt"></i> Cotizaciones</div>
+      <div class="nav-item" data-tab="orders" onclick="showTab('orders')"><i class="fas fa-shopping-cart"></i> Pedidos</div>
+      <div class="nav-item" data-tab="clients" onclick="showTab('clients')"><i class="fas fa-users"></i> Clientes</div>
+      <div class="nav-item" data-tab="products" onclick="showTab('products')"><i class="fas fa-box"></i> Productos</div>
+      <div class="nav-item" data-tab="settings" onclick="showTab('settings')"><i class="fas fa-cog"></i> Configuracion</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div style="margin-bottom:8px;"><i class="fas fa-database"></i> MariaDB</div>
+      <div id="dbStatus" style="color:var(--success);font-weight:600;"><i class="fas fa-circle" style="font-size:8px;"></i> Conectado</div>
+    </div>
+  </aside>
+
+  <!-- PDF Export Overlay -->
+  <div class="pdf-export-overlay" id="pdfExportOverlay">
+    <div class="loader">
+      <div class="spinner"></div>
+      <h3>Generando PDF...</h3>
+      <p>Por favor espera, esto puede tomar unos segundos.</p>
+    </div>
+  </div>
+
+  <!-- Iframe para PDF -->
+  <iframe id="pdfIframe"></iframe>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="tab-content active">
+      <div class="header">
+        <h2>Dashboard</h2>
+        <button class="btn btn-primary" onclick="showTab('new-quote')"><i class="fas fa-plus"></i> Nueva Cotizacion</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Cotizaciones del Mes</div>
+          <div class="stat-value" id="statQuotes">0</div>
+          <div class="stat-change positive"><i class="fas fa-arrow-up"></i> <span id="statQuotesChange">0%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Tasa de Conversion</div>
+          <div class="stat-value" id="statConversion">0%</div>
+          <div class="stat-change positive"><i class="fas fa-arrow-up"></i> <span id="statConvChange">0%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Ventas Convertidas</div>
+          <div class="stat-value" id="statSales">$0</div>
+          <div class="stat-change positive"><i class="fas fa-arrow-up"></i> <span id="statSalesChange">0%</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Clientes Activos</div>
+          <div class="stat-value" id="statClients">0</div>
+          <div class="stat-change positive"><i class="fas fa-arrow-up"></i> <span id="statClientsNew">0 nuevos</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> Cotizaciones Recientes</div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="recentQuotesTable"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-truck"></i> Pedidos Recientes</div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="recentOrdersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- NEW QUOTE -->
+    <div id="new-quote" class="tab-content">
+      <div class="header">
+        <h2>Nueva Cotizacion</h2>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="showPreview()"><i class="fas fa-eye"></i> Vista Previa</button>
+          <button class="btn btn-primary" id="saveQuoteBtn" onclick="saveQuote()"><i class="fas fa-save"></i> Guardar Cotizacion</button>
+        </div>
+      </div>
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <div class="card-title"><i class="fas fa-user"></i> Informacion del Cliente</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Cliente *</label>
+                <select class="form-control" id="clientSelect" onchange="onClientChange()">
+                  <option value="">Seleccionar cliente...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Contacto</label>
+                <input type="text" class="form-control" id="contactName" placeholder="Nombre del contacto">
+              </div>
+              <div class="form-group">
+                <label>Correo</label>
+                <input type="email" class="form-control" id="clientEmail" placeholder="correo@ejemplo.com">
+              </div>
+              <div class="form-group">
+                <label>Telefono</label>
+                <input type="tel" class="form-control" id="clientPhone" placeholder="+52 55 1234 5678">
+              </div>
+              <div class="form-group">
+                <label>Vigencia (dias)</label>
+                <input type="number" class="form-control" id="validityDays" value="30">
+              </div>
+              <div class="form-group">
+                <label>Condiciones de Pago</label>
+                <select class="form-control" id="paymentTerms">
+                  <option>Contado</option><option>15 dias</option><option>30 dias</option><option>60 dias</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label>Notas / Terminos</label>
+              <textarea class="form-control" id="quoteNotes" placeholder="Terminos y condiciones, notas especiales..."></textarea>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><i class="fas fa-tags"></i> Lista de Precios</div>
+            <div class="price-list-selector">
+              <div class="price-chip active" onclick="setPriceList(this, 'general')">General</div>
+              <div class="price-chip" onclick="setPriceList(this, 'mayoreo')">Mayoreo</div>
+              <div class="price-chip" onclick="setPriceList(this, 'distribuidor')">Distribuidor</div>
+              <div class="price-chip" onclick="setPriceList(this, 'promo')">Promociones</div>
+            </div>
+            <div style="font-size:13px;color:var(--text-light);">
+              <i class="fas fa-info-circle"></i> <span id="priceListDesc">Precios de lista estandar con margen de utilidad del 40%</span>
+            </div>
+          </div>
+
+          <!-- SECTION 1 -->
+          <div class="quote-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title"><i class="fas fa-box-open"></i> Productos o Servicios</div>
+              <button class="btn btn-sm btn-primary" onclick="addLineItem('products')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="productsLines"></div>
+            <div class="subtotal-row"><span>Subtotal Productos/Servicios:</span><span id="subtotalProducts">$0.00</span></div>
+          </div>
+
+          <!-- SECTION 2 -->
+          <div class="quote-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title"><i class="fas fa-key"></i> Licenciamientos Especiales</div>
+              <button class="btn btn-sm btn-primary" onclick="addLineItem('licenses')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="licensesLines"></div>
+            <div class="subtotal-row"><span>Subtotal Licenciamientos:</span><span id="subtotalLicenses">$0.00</span></div>
+          </div>
+
+          <!-- SECTION 3 -->
+          <div class="quote-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title"><i class="fas fa-hard-hat"></i> Mano de Obra</div>
+              <button class="btn btn-sm btn-primary" onclick="addLineItem('labor')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="laborLines"></div>
+            <div class="subtotal-row"><span>Subtotal Mano de Obra:</span><span id="subtotalLabor">$0.00</span></div>
+          </div>
+
+          <!-- SECTION 4: Optional -->
+          <div class="optional-group-header">
+            <i class="fas fa-puzzle-piece"></i> EQUIPOS OPCIONALES
+            <span class="optional-badge">OPCIONAL</span>
+            <span class="optional-group-note">No se suman al total principal. El IVA se calcula igual que en el total principal.</span>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;padding:12px;background:#fffbeb;border:1px solid var(--warning);">
+            <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:12px;">Descuento en Opcionales</label>
+                <select class="form-control" id="optionalDiscountType" onchange="calculateTotals()">
+                  <option value="none">Sin descuento</option>
+                  <option value="percent">Porcentaje %</option>
+                  <option value="fixed">Monto fijo</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label style="font-size:12px;">Valor</label>
+                <input type="number" class="form-control" id="optionalDiscountValue" value="0" onchange="calculateTotals()">
+              </div>
+            </div>
+          </div>
+
+          <div class="quote-section optional-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title" style="color:var(--warning);"><i class="fas fa-box-open"></i> Equipos o Servicios Opcionales</div>
+              <button class="btn btn-sm" style="background:var(--warning);color:#fff;" onclick="addLineItem('optionalProducts')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="optionalProductsLines"></div>
+            <div class="subtotal-row" style="background:#fef3c7;"><span>Subtotal Equipos Opcionales:</span><span id="subtotalOptionalProducts" style="color:var(--warning);">$0.00</span></div>
+          </div>
+
+          <div class="quote-section optional-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title" style="color:var(--warning);"><i class="fas fa-key"></i> Licencias Opcionales</div>
+              <button class="btn btn-sm" style="background:var(--warning);color:#fff;" onclick="addLineItem('optionalLicenses')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="optionalLicensesLines"></div>
+            <div class="subtotal-row" style="background:#fef3c7;"><span>Subtotal Licencias Opcionales:</span><span id="subtotalOptionalLicenses" style="color:var(--warning);">$0.00</span></div>
+          </div>
+
+          <div class="quote-section optional-section">
+            <div class="quote-section-header">
+              <div class="quote-section-title" style="color:var(--warning);"><i class="fas fa-hard-hat"></i> Mano de Obra Opcional</div>
+              <button class="btn btn-sm" style="background:var(--warning);color:#fff;" onclick="addLineItem('optionalLabor')"><i class="fas fa-plus"></i> Agregar</button>
+            </div>
+            <div id="optionalLaborLines"></div>
+            <div class="subtotal-row" style="background:#fef3c7;"><span>Subtotal Mano de Obra Opcional:</span><span id="subtotalOptionalLabor" style="color:var(--warning);">$0.00</span></div>
+          </div>
+        </div>
+
+        <!-- Totals Sidebar -->
+        <div>
+          <div class="totals-card">
+            <div class="card-title"><i class="fas fa-calculator"></i> Resumen</div>
+            <div class="total-row"><span>Subtotal Productos/Servicios</span><span id="summaryProducts">$0.00</span></div>
+            <div class="total-row"><span>Subtotal Licenciamientos</span><span id="summaryLicenses">$0.00</span></div>
+            <div class="total-row"><span>Subtotal Mano de Obra</span><span id="summaryLabor">$0.00</span></div>
+            <div class="iva-toggle">
+              <label class="switch"><input type="checkbox" id="ivaToggle" onchange="calculateTotals()"><span class="slider"></span></label>
+              <span style="font-weight:600;font-size:14px;">Incluir IVA (16%)</span>
+            </div>
+            <div class="total-row" id="ivaRow" style="display:none;"><span>IVA (16%)</span><span id="ivaAmount">$0.00</span></div>
+            <div class="total-row grand"><span>TOTAL</span><span id="grandTotal">$0.00</span></div>
+            <div class="actions-row">
+              <button class="btn btn-success" style="flex:1;" onclick="convertToOrder()"><i class="fas fa-shopping-cart"></i> Convertir a Pedido</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+              <button class="btn btn-outline" style="flex:1;" onclick="sendQuote()"><i class="fas fa-paper-plane"></i> Enviar</button>
+              <button class="btn btn-outline" style="flex:1;" onclick="printQuote()"><i class="fas fa-print"></i> Imprimir</button>
+              <button class="btn btn-outline" style="flex:1;" onclick="downloadPDF()"><i class="fas fa-download"></i> PDF</button>
+            </div>
+          </div>
+
+          <div class="card optional-total-card" style="margin-top:16px;">
+            <div class="card-title"><i class="fas fa-puzzle-piece"></i> Equipos Opcionales <span class="optional-badge">OPCIONAL</span></div>
+            <div class="total-row"><span>Equipos o Servicios Opcionales</span><span id="summaryOptionalProducts">$0.00</span></div>
+            <div class="total-row"><span>Licencias Opcionales</span><span id="summaryOptionalLicenses">$0.00</span></div>
+            <div class="total-row"><span>Mano de Obra Opcional</span><span id="summaryOptionalLabor">$0.00</span></div>
+            <div class="total-row" id="ivaOptionalRow" style="display:none;"><span>IVA Opcionales (16%)</span><span id="ivaOptionalAmount">$0.00</span></div>
+            <div class="total-row grand"><span>SUMA TOTAL CON EQUIPOS OPCIONALES</span><span id="totalWithOptional">$0.00</span></div>
+            <p style="font-size:11px;color:#92400e;margin-top:8px;"><i class="fas fa-info-circle"></i> Monto de referencia. No reemplaza el total principal.</p>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-title"><i class="fas fa-percent"></i> Descuento Global</div>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+              <div class="form-group">
+                <label>Tipo</label>
+                <select class="form-control" id="discountType" onchange="calculateTotals()">
+                  <option value="none">Sin descuento</option>
+                  <option value="percent">Porcentaje %</option>
+                  <option value="fixed">Monto fijo</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Valor</label>
+                <input type="number" class="form-control" id="discountValue" value="0" onchange="calculateTotals()">
+              </div>
+            </div>
+          </div>
+
+          <!-- PAGO / FINANCIAMIENTO -->
+          <div class="card" style="margin-top:16px;">
+            <div class="card-title"><i class="fas fa-credit-card"></i> Metodo de Pago</div>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+              <div class="form-group">
+                <label>Pago Inicial (%)</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="number" class="form-control" id="downPaymentPct" value="0" min="0" max="100" onchange="calculatePaymentInfo()">
+                  <span style="font-weight:600;color:var(--text-light);">%</span>
+                </div>
+                <small style="color:var(--text-light);">Anticipo requerido</small>
+              </div>
+              <div class="form-group">
+                <label>Financiamiento (%)</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="number" class="form-control" id="financingPct" value="0" min="0" max="100" step="0.5" onchange="calculatePaymentInfo()">
+                  <span style="font-weight:600;color:var(--text-light);">%</span>
+                </div>
+                <small style="color:var(--text-light);">Incremento por credito</small>
+              </div>
+              <div class="form-group">
+                <label>Dias de Credito</label>
+                <input type="number" class="form-control" id="creditDays" value="0" min="0" step="1" onchange="calculatePaymentInfo()">
+                <small style="color:var(--text-light);">Despues de entrega</small>
+              </div>
+            </div>
+            <div id="paymentSummary" style="margin-top:12px;padding:12px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;display:none;">
+              <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #d1fae5;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:13px;">
+                  <span>Subtotal (Prod+Lic+MO):</span>
+                  <span id="paySubtotal" style="text-align:right;">$0.00</span>
+                  <span>Equipos Opcionales:</span>
+                  <span id="payOptional" style="text-align:right;">$0.00</span>
+                  <span>IVA:</span>
+                  <span id="payIva" style="text-align:right;">$0.00</span>
+                  <span style="font-weight:600;border-top:1px solid #d1fae5;padding-top:4px;">Total General:</span>
+                  <span id="payTotalBase" style="text-align:right;font-weight:700;border-top:1px solid #d1fae5;padding-top:4px;">$0.00</span>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px;">
+                <span>Pago Inicial:</span>
+                <span id="payDownPayment" style="text-align:right;font-weight:600;color:var(--primary);">$0.00</span>
+                <span>Saldo a Financiar:</span>
+                <span id="payFinancedAmount" style="text-align:right;font-weight:600;">$0.00</span>
+                <span>Cargo por Financiamiento:</span>
+                <span id="payFinancingCharge" style="text-align:right;font-weight:600;color:var(--danger);">$0.00</span>
+                <span style="border-top:2px solid #e5e7eb;padding-top:4px;">Total Con Financiamiento:</span>
+                <span id="payTotalWithFinancing" style="text-align:right;font-weight:700;color:var(--danger);border-top:2px solid #e5e7eb;padding-top:4px;">$0.00</span>
+              </div>
+              <div id="payCreditInfo" style="margin-top:8px;font-size:12px;color:var(--text-light);padding-top:8px;border-top:1px solid #e5e7eb;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUOTES LIST -->
+    <div id="quotes" class="tab-content">
+      <div class="header">
+        <h2>Cotizaciones</h2>
+        <button class="btn btn-primary" onclick="showTab('new-quote')"><i class="fas fa-plus"></i> Nueva Cotizacion</button>
+      </div>
+      <div class="card">
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Buscar cotizacion..." onkeyup="filterQuotes(this.value)"></div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Vigencia</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="allQuotesTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDERS LIST -->
+    <div id="orders" class="tab-content">
+      <div class="header">
+        <h2>Pedidos</h2>
+        <button class="btn btn-primary" onclick="showTab('new-quote')"><i class="fas fa-plus"></i> Nueva Cotizacion</button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stat-card"><div class="stat-label">Total Pedidos</div><div class="stat-value" id="statTotalOrders">0</div></div>
+        <div class="stat-card"><div class="stat-label">Pendientes</div><div class="stat-value" id="statPendingOrders" style="color:var(--warning);">0</div></div>
+        <div class="stat-card"><div class="stat-label">En Proceso</div><div class="stat-value" id="statProcessingOrders" style="color:var(--primary);">0</div></div>
+        <div class="stat-card"><div class="stat-label">Completados</div><div class="stat-value" id="statCompletedOrders" style="color:var(--success);">0</div></div>
+      </div>
+      <div class="card">
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Buscar pedido..." onkeyup="filterOrders(this.value)"></div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Folio</th><th>Cliente</th><th>Fecha</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="allOrdersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTS -->
+    <div id="clients" class="tab-content">
+      <div class="header">
+        <h2>Cartera de Clientes</h2>
+        <button class="btn btn-primary" onclick="openClientModal()"><i class="fas fa-plus"></i> Nuevo Cliente</button>
+      </div>
+      <div class="card">
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Buscar cliente..." onkeyup="filterClients(this.value)"></div>
+        <div id="clientsList"></div>
+      </div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div id="products" class="tab-content">
+      <div class="header">
+        <h2>Catalogo de Productos</h2>
+        <button class="btn btn-primary" onclick="openProductModal()"><i class="fas fa-plus"></i> Nuevo Producto</button>
+      </div>
+      <div class="card">
+        <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Buscar producto..." onkeyup="filterProducts(this.value)"></div>
+        <div class="product-grid" id="productsGrid"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="settings" class="tab-content">
+      <div class="header"><h2>Configuracion</h2></div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-building"></i> Datos de la Empresa</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Nombre</label><input type="text" class="form-control" id="companyName" value="Mi Empresa S.A. de C.V."></div>
+          <div class="form-group"><label>RFC</label><input type="text" class="form-control" id="companyRFC" value="MEE010101ABC"></div>
+          <div class="form-group"><label>Direccion</label><input type="text" class="form-control" id="companyAddress" value="Av. Principal 123, Ciudad de Mexico"></div>
+          <div class="form-group"><label>Telefono</label><input type="text" class="form-control" id="companyPhone" value="+52 55 1234 5678"></div>
+          <div class="form-group"><label>Correo</label><input type="email" class="form-control" id="companyEmail" value="ventas@miempresa.com"></div>
+          <div class="form-group"><label>Sitio Web</label><input type="text" class="form-control" id="companyWeb" value="www.miempresa.com"></div>
+        </div>
+        <div class="form-group" style="margin-top:12px;">
+          <label>Logo de la Empresa</label>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <input type="file" accept="image/*" id="logoUpload" onchange="handleLogoUpload(this)" style="flex:1;">
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('logoPreview').src='';document.getElementById('logoPreview').style.display='none';document.getElementById('logoUpload').value='';showToast('Logo eliminado','info')"><i class="fas fa-times"></i> Quitar</button>
+          </div>
+          <div id="logoPreviewContainer" style="margin-top:8px;display:none;">
+            <img id="logoPreview" style="max-height:60px;border:1px solid var(--border);border-radius:6px;padding:4px;">
+          </div>
+        </div>
+        <div class="form-grid" style="margin-top:12px;grid-template-columns:1fr 1fr;">
+          <div class="form-group"><label>Banco</label><input type="text" class="form-control" id="bankName" placeholder="Nombre del banco"></div>
+          <div class="form-group"><label>Numero de Cuenta</label><input type="text" class="form-control" id="bankAccount" placeholder="0000-0000-0000-0000"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-paper-plane"></i> Envio de Correo (EmailJS) <span id="emailjsStatusBadge" class="status-badge status-rechazada" style="margin-left:8px;">Sin configurar</span></div>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Configura EmailJS para enviar cotizaciones por correo.</p>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="form-group"><label>Public Key</label><input type="text" class="form-control" id="emailjsPublicKey"></div>
+          <div class="form-group"><label>Service ID</label><input type="text" class="form-control" id="emailjsServiceId"></div>
+          <div class="form-group"><label>Template ID</label><input type="text" class="form-control" id="emailjsTemplateId"></div>
+        </div>
+        <div style="margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="emailjsAttachPDF" onchange="document.getElementById('emailjsAttachmentFieldGroup').style.display = this.checked ? 'block' : 'none';">
+            Adjuntar PDF (plan de pago EmailJS)
+          </label>
+          <div class="form-group" id="emailjsAttachmentFieldGroup" style="display:none;margin-top:10px;max-width:320px;">
+            <label>Campo de adjunto</label>
+            <input type="text" class="form-control" id="emailjsAttachmentField" placeholder="ej. quote_pdf">
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-outline btn-sm" onclick="sendTestEmail()"><i class="fas fa-vial"></i> Correo de prueba</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-percentage"></i> Reglas de Precios</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Margen Default (%)</label><input type="number" class="form-control" id="defaultMargin" value="40"></div>
+          <div class="form-group"><label>Descuento Maximo (%)</label><input type="number" class="form-control" id="maxDiscount" value="25"></div>
+          <div class="form-group"><label>Moneda</label><select class="form-control"><option>MXN</option><option>USD</option></select></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-palette"></i> Personalizacion</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Color Principal</label><input type="color" class="form-control" id="primaryColor" value="#1a56db" style="height:42px;"></div>
+          <div class="form-group"><label>Plantilla</label><select class="form-control"><option>Estandar Profesional</option><option>Moderna Minimalista</option><option>Corporativa</option></select></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="saveSettingsHandler()"><i class="fas fa-save"></i> Guardar Configuracion</button>
+        <button class="btn btn-outline" onclick="resetDatabaseHandler()"><i class="fas fa-trash"></i> Resetear Base de Datos</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Preview Modal -->
+<div class="preview-modal" id="previewModal">
+  <div class="preview-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <h2 style="font-size:20px;">Vista Previa de Cotizacion</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-success" onclick="downloadCurrentPreviewPDF()"><i class="fas fa-file-pdf"></i> Descargar PDF</button>
+        <button class="btn btn-outline" onclick="printCurrentPreview()"><i class="fas fa-print"></i> Imprimir</button>
+        <button class="btn btn-outline" onclick="closePreview()"><i class="fas fa-times"></i> Cerrar</button>
+      </div>
+    </div>
+    <div id="previewBody"></div>
+  </div>
+</div>
+
+<!-- Order Detail Modal -->
+<div class="modal-overlay" id="orderDetailModal">
+  <div class="modal-box" style="max-width:800px;">
+    <h3><i class="fas fa-shopping-cart"></i> Detalle del Pedido</h3>
+    <div id="orderDetailBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeOrderDetail()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client Modal -->
+<div class="modal-overlay" id="clientModal">
+  <div class="modal-box">
+    <h3><i class="fas fa-user-plus"></i> Nuevo Cliente</h3>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="form-group"><label>Nombre *</label><input type="text" class="form-control" id="newClientName" placeholder="Nombre de la empresa"></div>
+      <div class="form-group"><label>RFC</label><input type="text" class="form-control" id="newClientRFC" placeholder="RFC"></div>
+      <div class="form-group"><label>Contacto</label><input type="text" class="form-control" id="newClientContact" placeholder="Nombre del contacto"></div>
+      <div class="form-group"><label>Correo</label><input type="email" class="form-control" id="newClientEmail" placeholder="correo@ejemplo.com"></div>
+      <div class="form-group"><label>Telefono</label><input type="tel" class="form-control" id="newClientPhone" placeholder="+52 55 1234 5678"></div>
+      <div class="form-group"><label>Limite de Credito</label><input type="number" class="form-control" id="newClientLimit" value="50000"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeClientModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveNewClient()"><i class="fas fa-save"></i> Guardar Cliente</button>
+    </div>
+  </div>
+</div>
+
+<!-- Product Modal -->
+<div class="modal-overlay" id="productModal">
+  <div class="modal-box">
+    <h3><i class="fas fa-box"></i> Nuevo Producto</h3>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="form-group"><label>Nombre *</label><input type="text" class="form-control" id="newProductName" placeholder="Nombre del producto"></div>
+      <div class="form-group"><label>SKU *</label><input type="text" class="form-control" id="newProductSKU" placeholder="SKU-001"></div>
+      <div class="form-group"><label>Categoria</label><input type="text" class="form-control" id="newProductCategory" placeholder="Hardware, Software, etc."></div>
+      <div class="form-group"><label>Costo</label><input type="number" class="form-control" id="newProductCost" value="0"></div>
+      <div class="form-group"><label>Precio Lista</label><input type="number" class="form-control" id="newProductPrice" value="0"></div>
+      <div class="form-group"><label>Precio Mayoreo</label><input type="number" class="form-control" id="newProductMayoreo" value="0"></div>
+      <div class="form-group"><label>Precio Distribuidor</label><input type="number" class="form-control" id="newProductDistribuidor" value="0"></div>
+      <div class="form-group"><label>Precio Promocion</label><input type="number" class="form-control" id="newProductPromo" value="0"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeProductModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveNewProduct()"><i class="fas fa-save"></i> Guardar Producto</button>
+    </div>
+  </div>
+</div>
+
+<!-- Convert to Order Modal -->
+<div class="modal-overlay" id="convertOrderModal">
+  <div class="modal-box">
+    <h3><i class="fas fa-shopping-cart"></i> Convertir a Pedido</h3>
+    <p style="color:var(--text-light);margin-bottom:16px;">Confirma los datos para crear un pedido a partir de esta cotizacion.</p>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="form-group">
+        <label>Folio de Pedido</label>
+        <input type="text" class="form-control" id="orderFolio" readonly>
+      </div>
+      <div class="form-group">
+        <label>Estado Inicial</label>
+        <select class="form-control" id="orderStatus">
+          <option value="pendiente">Pendiente</option>
+          <option value="aprobado">Aprobado</option>
+          <option value="en-proceso">En Proceso</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column: span 2;">
+        <label>Notas del Pedido</label>
+        <textarea class="form-control" id="orderNotes" placeholder="Notas adicionales..."></textarea>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeConvertOrderModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="confirmConvertToOrder()"><i class="fas fa-check"></i> Confirmar Pedido</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/email.js"></script>
+</body>
+</html>
