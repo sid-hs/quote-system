@@ -47,6 +47,9 @@ const API = {
   updateOrder(id, data) { return this.put(`/orders/${id}`, data); },
   deleteOrder(id) { return this.del(`/orders/${id}`); },
 
+  // Catalog
+  getCatalog() { return this.get('/catalog'); },
+
   // Settings
   getSettings() { return this.get('/settings'); },
   saveSettings(data) { return this.put('/settings', data); },

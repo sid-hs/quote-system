@@ -1,4 +1,5 @@
 let clients = [];
+let catalog = [];
 let products = [];
 let laborItems = [];
 let licenseItems = [];
@@ -28,6 +29,9 @@ async function loadAllData() {
     licenseItems = p.licenses || [];
     quotes = q;
     orders = o;
+
+    const catalogData = await API.getCatalog().catch(() => []);
+    catalog = catalogData;
 
     applySettings(s);
 
@@ -322,6 +326,15 @@ function addLineItem(section) {
   renderLineItem(section, line);
 }
 
+function getPriceForCatalog(item) {
+  switch(currentPriceList) {
+    case 'mayoreo': return item.mayoreo_price || item.price;
+    case 'distribuidor': return item.distribuidor_price || item.price;
+    case 'promo': return item.promo_price || item.price;
+    default: return item.price;
+  }
+}
+
 function renderLineItem(section, line) {
   const container = document.getElementById(section + 'Lines');
   const div = document.createElement('div');
@@ -330,7 +343,10 @@ function renderLineItem(section, line) {
   const hasImg = line.image ? 'flex' : 'none';
   div.innerHTML = `
     <div class="line-item-main">
-      <input type="text" placeholder="Descripcion del concepto" value="${line.description}" onchange="updateLine(${line.id}, 'description', this.value)">
+      <div class="catalog-search-wrapper">
+        <input type="text" class="catalog-search-input" placeholder="Buscar en catálogo..." value="${line.description}" data-line-id="${line.id}" autocomplete="off">
+        <div class="catalog-dropdown" id="catalog-dropdown-${line.id}"></div>
+      </div>
       <input type="number" placeholder="Cantidad" value="${line.quantity}" min="1" step="1" onchange="updateLine(${line.id}, 'quantity', this.value)">
       <input type="number" placeholder="Precio Unit." value="${line.price}" min="0" step="0.01" onchange="updateLine(${line.id}, 'price', this.value)">
       <input type="number" placeholder="Desc.%" value="${line.discount}" min="0" max="100" step="0.01" onchange="updateLine(${line.id}, 'discount', this.value)">
@@ -348,6 +364,109 @@ function renderLineItem(section, line) {
     </div>
   `;
   container.appendChild(div);
+  const input = div.querySelector('.catalog-search-input');
+  if (input) {
+    input.addEventListener('input', function() {
+      onCatalogSearch(this);
+    });
+    input.addEventListener('focus', function() {
+      onCatalogSearch(this);
+    });
+    input.addEventListener('blur', function() {
+      const id = parseInt(this.dataset.lineId);
+      const val = this.value;
+      for (const s in quoteLines) {
+        const l = quoteLines[s].find(x => x.id === id);
+        if (l) { l.description = val; break; }
+      }
+      setTimeout(() => closeCatalogDropdown(id), 250);
+    });
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        const dropdown = document.getElementById('catalog-dropdown-' + this.dataset.lineId);
+        if (dropdown && dropdown.children.length > 0) {
+          dropdown.children[0].click();
+        }
+      }
+      if (e.key === 'Escape') {
+        closeCatalogDropdown(this.dataset.lineId);
+      }
+    });
+  }
+}
+
+function onCatalogSearch(input) {
+  const lineId = parseInt(input.dataset.lineId);
+  const query = input.value.trim().toLowerCase();
+  const dropdown = document.getElementById('catalog-dropdown-' + lineId);
+  if (!dropdown) return;
+  if (!query) {
+    dropdown.innerHTML = '';
+    dropdown.style.display = 'none';
+    return;
+  }
+  const matches = catalog.filter(item => {
+    const name = (item.name || '').toLowerCase();
+    const sku = (item.sku || '').toLowerCase();
+    const cat = (item.category || '').toLowerCase();
+    return name.includes(query) || sku.includes(query) || cat.includes(query);
+  }).slice(0, 15);
+  if (matches.length === 0) {
+    dropdown.innerHTML = '<div class="catalog-dropdown-empty">Sin resultados</div>';
+    dropdown.style.display = 'block';
+    return;
+  }
+  const typeLabels = { product: 'Prod', labor: 'Mano Obra', license: 'Licencia' };
+  dropdown.innerHTML = matches.map(item => {
+    const price = getPriceForCatalog(item);
+    const label = typeLabels[item.type] || item.type;
+    return `<div class="catalog-dropdown-item" data-line-id="${lineId}" data-item-id="${item.id}" data-type="${item.type}" data-name="${item.name}" data-price="${price}" data-sku="${item.sku}">
+      <span class="cdi-name">${item.name}</span>
+      <span class="cdi-sku">${item.sku}</span>
+      <span class="cdi-price">$${Number(price).toLocaleString()}</span>
+      <span class="cdi-type">${label}</span>
+    </div>`;
+  }).join('');
+  dropdown.style.display = 'block';
+  dropdown.querySelectorAll('.catalog-dropdown-item').forEach(el => {
+    el.addEventListener('mousedown', function(e) {
+      e.preventDefault();
+      const id = parseInt(this.dataset.lineId);
+      const item = {
+        id: parseInt(this.dataset.itemId),
+        type: this.dataset.type,
+        name: this.dataset.name,
+        price: parseFloat(this.dataset.price),
+        sku: this.dataset.sku
+      };
+      selectCatalogItem(id, item);
+    });
+  });
+}
+
+function closeCatalogDropdown(lineId) {
+  const dropdown = document.getElementById('catalog-dropdown-' + lineId);
+  if (dropdown) {
+    dropdown.style.display = 'none';
+    dropdown.innerHTML = '';
+  }
+}
+
+function selectCatalogItem(lineId, item) {
+  const input = document.querySelector(`.catalog-search-input[data-line-id="${lineId}"]`);
+  if (input) input.value = item.name;
+  closeCatalogDropdown(lineId);
+  for (const section in quoteLines) {
+    const line = quoteLines[section].find(l => l.id === lineId);
+    if (line) {
+      line.productId = item.id;
+      line.description = item.name;
+      line.price = item.price;
+      updateLineTotal(lineId);
+      calculateTotals();
+      break;
+    }
+  }
 }
 
 function addProductToQuote(id, sku) {

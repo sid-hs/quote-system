@@ -8,6 +8,7 @@ const productsRouter = require('./routes/products');
 const quotesRouter = require('./routes/quotes');
 const ordersRouter = require('./routes/orders');
 const settingsRouter = require('./routes/settings');
+const catalogRouter = require('./routes/catalog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/quotes', quotesRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/catalog', catalogRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
